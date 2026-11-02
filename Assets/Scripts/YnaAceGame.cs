@@ -22,7 +22,11 @@ namespace YnaAce
         private int strikes;
         private int balls;
         private int outs;
-        private int score;
+        private int playerScore;
+        private int cpuScore;
+        private int inning = 1;
+        private bool playerBatting = true;
+        private bool gameOver;
         private string role = "打者";
         private string call = "ストライクゾーンを選び、来た球を SPACE またはクリックで打ってください。";
         private GUIStyle titleStyle;
@@ -45,6 +49,7 @@ namespace YnaAce
             CreatePlayers();
             CreateBall();
             SetupCamera();
+            BeginHalfInning();
         }
 
         private void BuildStadium()
@@ -98,7 +103,11 @@ namespace YnaAce
         {
             if (Input.GetKeyDown(KeyCode.P)) paused = !paused;
             if (paused) return;
-            if (Input.GetKeyDown(KeyCode.Tab)) ToggleRole();
+            if (gameOver)
+            {
+                if (Input.GetKeyDown(KeyCode.R)) RestartGame();
+                return;
+            }
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)) Swing();
             if (Input.GetKeyDown(KeyCode.A)) MoveRunner(-1f);
             if (Input.GetKeyDown(KeyCode.D)) MoveRunner(1f);
@@ -126,7 +135,11 @@ namespace YnaAce
                 ball.position = next;
                 yield return null;
             }
-            if (!swung) CountPitch(false);
+            if (!swung)
+            {
+                if (playerBatting) CountPitch(false);
+                else ResolveCpuAtPlate();
+            }
             pitching = false;
         }
 
@@ -143,52 +156,151 @@ namespace YnaAce
                 ballBody.isKinematic = false;
                 ballBody.useGravity = true;
                 ballBody.velocity = new Vector3(Random.Range(-7f, 7f), Random.Range(7f, 11f), Random.Range(12f, 20f));
-                runner.gameObject.SetActive(true);
                 call = timing < 0.07f ? "完璧なタイミング！ 強い打球が飛んだ！" : "打った！ フェアグラウンドへ！";
-                StartCoroutine(FieldBall());
+                StartCoroutine(FieldBall(true));
             }
             else
             {
                 call = "空振り！";
                 CountPitch(true);
                 pitching = false;
-                StopAllCoroutines();
             }
         }
 
-        private IEnumerator FieldBall()
+        private void ResolveCpuAtPlate()
         {
-            yield return new WaitForSeconds(0.65f);
-            if (ball.position.z < 24f && ball.position.y < 3.5f)
+            bool inZone = IsStrikeZone();
+            float decision = Random.value;
+            if (!inZone && decision < 0.42f)
             {
-                call = "ピッチャーが前へ！ 打球を処理しました。アウト！";
-                outs = Mathf.Min(3, outs + 1);
+                balls++;
+                call = "CPU打者は見送った。ボール。";
+                if (balls >= 4) { runner.gameObject.SetActive(true); call = "CPU打者、フォアボール。"; ResetCount(); }
                 ResetBall();
+                return;
+            }
+            if (decision < 0.28f)
+            {
+                strikes++;
+                call = "CPU打者、空振り！";
+                if (strikes >= 3) RegisterOut("三振！ CPU打者を打ち取りました。");
+                ResetBall();
+                return;
+            }
+            if (decision < 0.68f)
+            {
+                ballBody.isKinematic = false;
+                ballBody.useGravity = true;
+                ballBody.velocity = new Vector3(Random.Range(-6f, 6f), Random.Range(6f, 10f), Random.Range(11f, 19f));
+                call = "CPU打者が打った！ 守備へ！";
+                StartCoroutine(FieldBall(false));
+                return;
+            }
+            strikes = Mathf.Min(2, strikes + 1);
+            call = "ファウル。追い込まれました。";
+            ResetBall();
+        }
+
+        private IEnumerator FieldBall(bool playerHit)
+        {
+            float until = Time.time + 1.4f;
+            while (Time.time < until)
+            {
+                pitcher.position = Vector3.MoveTowards(pitcher.position, new Vector3(ball.position.x, 0f, ball.position.z), Time.deltaTime * 5f);
+                yield return null;
+            }
+            bool fielded = ball.position.z < 25f && ball.position.y < 2.5f;
+            if (fielded)
+            {
+                RegisterOut("ピッチャーが前へ！ 打球を処理しました。アウト！");
             }
             else
             {
-                score++;
-                call = "打球は抜けた！ 1点追加！";
-                ResetBall();
+                if (playerHit) playerScore++; else cpuScore++;
+                runner.gameObject.SetActive(true);
+                call = playerHit ? "打球は抜けた！ あなたに1点追加！" : "打球が外野を抜けた。CPUに1点。";
             }
+            ResetBall();
         }
 
         private void CountPitch(bool swingMiss)
         {
-            bool inZone = Mathf.Abs(target.x) < 0.72f && target.y > 0.48f && target.y < 1.28f;
+            bool inZone = IsStrikeZone();
             if (swingMiss || inZone) strikes++; else balls++;
-            if (strikes >= 3) { outs = Mathf.Min(3, outs + 1); call = "三振！"; strikes = 0; balls = 0; }
-            if (balls >= 4) { call = "フォアボール。走者が出ました。"; balls = 0; strikes = 0; runner.gameObject.SetActive(true); }
+            if (strikes >= 3) RegisterOut("三振！");
+            if (balls >= 4) { call = "フォアボール。走者が出ました。"; runner.gameObject.SetActive(true); ResetCount(); }
             ResetBall();
         }
 
         private void ResetBall()
         {
-            StopAllCoroutines();
             pitching = false;
             ballBody.isKinematic = true;
             ballBody.useGravity = false;
             ball.position = ballStart;
+        }
+
+        private bool IsStrikeZone() => Mathf.Abs(target.x) < 0.72f && target.y > 0.48f && target.y < 1.28f;
+
+        private void RegisterOut(string message)
+        {
+            outs++;
+            call = message;
+            ResetCount();
+            if (outs >= 3) StartCoroutine(ChangeHalfInning());
+        }
+
+        private IEnumerator ChangeHalfInning()
+        {
+            yield return new WaitForSeconds(1.6f);
+            if (playerBatting && inning >= 9 && playerScore < cpuScore)
+            {
+                FinishGame();
+                yield break;
+            }
+            if (!playerBatting && inning >= 9 && playerScore != cpuScore)
+            {
+                FinishGame();
+                yield break;
+            }
+            if (!playerBatting) inning++;
+            playerBatting = !playerBatting;
+            BeginHalfInning();
+        }
+
+        private void BeginHalfInning()
+        {
+            outs = 0;
+            ResetCount();
+            runner.gameObject.SetActive(false);
+            pitcher.position = new Vector3(0f, 0f, 18.44f);
+            role = playerBatting ? "打者" : "投手";
+            call = inning + "回" + (playerBatting ? "表：あなたの攻撃です。ENTERで投球を待ちます。" : "裏：あなたの投球です。ゾーンを選んで投げてください。");
+        }
+
+        private void ResetCount()
+        {
+            strikes = 0;
+            balls = 0;
+        }
+
+        private void FinishGame()
+        {
+            gameOver = true;
+            role = "試合終了";
+            call = playerScore > cpuScore ? "ゲームセット！ あなたの勝ちです。Rで再戦。" : "ゲームセット。CPUの勝ちです。Rで再戦。";
+        }
+
+        private void RestartGame()
+        {
+            StopAllCoroutines();
+            playerScore = 0;
+            cpuScore = 0;
+            inning = 1;
+            playerBatting = true;
+            gameOver = false;
+            ResetBall();
+            BeginHalfInning();
         }
 
         private void MoveRunner(float direction)
@@ -196,12 +308,6 @@ namespace YnaAce
             if (!runner.gameObject.activeSelf) return;
             runner.position += new Vector3(direction * 0.55f, 0f, 0.55f);
             call = direction > 0 ? "右足で前へ。走者が進む！" : "左足で姿勢を整える。";
-        }
-
-        private void ToggleRole()
-        {
-            role = role == "打者" ? "投手" : "打者";
-            call = role == "投手" ? "あなたは投手です。ゾーンを選んで投げます。" : "あなたは打者です。ENTER で CPU が投球します。";
         }
 
         private void AnimatePlayers()
@@ -217,7 +323,7 @@ namespace YnaAce
             if (titleStyle == null) ConfigureGui();
             GUI.Label(new Rect(24, 18, 500, 44), "YNA ACE  UNITY WEBGL", titleStyle);
             GUI.Box(new Rect(24, 72, 360, 120), "", panelStyle);
-            GUI.Label(new Rect(40, 84, 330, 96), "役割：" + role + "\nスコア：あなた " + score + " - CPU 0\nB " + balls + "   S " + strikes + "   O " + outs + "\n" + call, textStyle);
+            GUI.Label(new Rect(40, 84, 330, 96), "" + inning + "回　役割：" + role + "\nスコア：あなた " + playerScore + " - CPU " + cpuScore + "\nB " + balls + "   S " + strikes + "   O " + outs + "\n" + call, textStyle);
             GUI.Box(new Rect(Screen.width - 224, 22, 200, 250), "", panelStyle);
             GUI.Label(new Rect(Screen.width - 208, 34, 168, 26), "狙うストライクゾーン", textStyle);
             for (int y = 0; y < 5; y++) for (int x = 0; x < 5; x++)
@@ -229,12 +335,12 @@ namespace YnaAce
                 if (GUI.Button(cell, ""))
                 {
                     target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
-                    if (role == "投手" && !pitching) StartCoroutine(ThrowPitch());
+                    if (role == "投手" && !pitching && !gameOver) StartCoroutine(ThrowPitch());
                     else if (role == "打者" && !pitching) call = "狙いを定めました。ENTER で投球を待ちます。";
                 }
                 GUI.color = old;
             }
-            GUI.Label(new Rect(Screen.width - 208, 248, 180, 22), paused ? "一時停止中（Pで再開）" : "SPACE/クリック：スイング", textStyle);
+            GUI.Label(new Rect(Screen.width - 208, 248, 180, 22), gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : "SPACE/クリック：スイング"), textStyle);
         }
 
         private void ConfigureGui()
