@@ -7,3 +7,4 @@
 [Uu]ser[Ss]ettings/
 *.csproj
 *.sln
+.DS_Store
