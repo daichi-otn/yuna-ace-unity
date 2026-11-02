@@ -119,22 +119,8 @@
       "source": "builtin",
       "dependencies": {
         "com.unity.render-pipelines.core": "17.6.0",
-        "com.unity.searcher": "4.9.3",
+        "com.unity.searcher": "4.9.5",
         "com.unity.graph-authoring": "1.0.0"
-      }
-    },
-    "com.unity.template.urp-blank": {
-      "version": "file:com.unity.template.urp-blank",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {
-        "com.unity.ide.rider": "3.0.40",
-        "com.unity.ide.visualstudio": "2.0.28",
-        "com.unity.inputsystem": "1.20.0",
-        "com.unity.render-pipelines.universal": "17.6.0",
-        "com.unity.ugui": "2.6.0",
-        "com.unity.collab-proxy": "2.13.6",
-        "com.unity.modules.vectorgraphics": "1.0.0"
       }
     },
     "com.unity.test-framework": {

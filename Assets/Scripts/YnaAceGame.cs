@@ -155,7 +155,7 @@ namespace YnaAce
                 pitching = false;
                 ballBody.isKinematic = false;
                 ballBody.useGravity = true;
-                ballBody.velocity = new Vector3(Random.Range(-7f, 7f), Random.Range(7f, 11f), Random.Range(12f, 20f));
+                ballBody.linearVelocity = new Vector3(Random.Range(-7f, 7f), Random.Range(7f, 11f), Random.Range(12f, 20f));
                 call = timing < 0.07f ? "完璧なタイミング！ 強い打球が飛んだ！" : "打った！ フェアグラウンドへ！";
                 StartCoroutine(FieldBall(true));
             }
@@ -191,7 +191,7 @@ namespace YnaAce
             {
                 ballBody.isKinematic = false;
                 ballBody.useGravity = true;
-                ballBody.velocity = new Vector3(Random.Range(-6f, 6f), Random.Range(6f, 10f), Random.Range(11f, 19f));
+                ballBody.linearVelocity = new Vector3(Random.Range(-6f, 6f), Random.Range(6f, 10f), Random.Range(11f, 19f));
                 call = "CPU打者が打った！ 守備へ！";
                 StartCoroutine(FieldBall(false));
                 return;

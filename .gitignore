@@ -7,4 +7,6 @@
 [Uu]ser[Ss]ettings/
 *.csproj
 *.sln
+*.slnx
+.vscode/
 .DS_Store
