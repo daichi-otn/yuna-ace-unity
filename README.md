@@ -15,4 +15,14 @@
 
 ## Unity で開く
 
-Unity 6.6.7f1 以降で `Assets/Scenes/SampleScene.unity` を開いて再生してください。WebGL ビルドは、ゲーム本体の完成後に別途設定します。
+Unity 6.6.7f1 以降で `Assets/Scenes/SampleScene.unity` を開いて再生してください。
+
+## Web アプリ（WebGL）としてビルド
+
+WebGL 出力は `Build/WebGL` に作成します。Unity CLI が使える環境では、プロジェクト直下で以下を実行します。
+
+```bash
+Unity build . --editor-version 6000.6.7f1 --target WebGL --execute-method YnaAce.Editor.WebGlBuild.PerformBuild
+```
+
+ビルド後は、`Build/WebGL` をローカル HTTP サーバーで配信してブラウザから開きます。`file://` で直接開くことはできません。
