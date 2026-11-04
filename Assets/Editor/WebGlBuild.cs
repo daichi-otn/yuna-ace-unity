@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
@@ -20,10 +21,19 @@ namespace YnaAce.Editor
                 throw new BuildFailedException("ビルド対象のシーンがありません。");
             }
 
+            // GitHub PagesではContent-Encodingヘッダーを付けられないため、
+            // Unityの圧縮済み(.br/.gz)成果物ではなく非圧縮ファイルを公開します。
+            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+            const string outputPath = "Build/WebGL";
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = "Build/WebGL",
+                locationPathName = outputPath,
                 target = BuildTarget.WebGL,
                 options = BuildOptions.None,
             });
