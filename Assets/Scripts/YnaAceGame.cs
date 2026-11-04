@@ -117,11 +117,27 @@ namespace YnaAce
 
         private async Task ReplaceWithRealModel(Transform actor, Color uniformColor, bool addBat = false)
         {
-            foreach (Transform child in actor) child.gameObject.SetActive(false);
             var visual = new GameObject(actor.name + " リアルモデル");
             visual.transform.SetParent(actor, false);
             visual.transform.localScale = Vector3.one * 1.15f;
-            await playerModel.InstantiateMainSceneAsync(visual.transform);
+            bool instantiated = await playerModel.InstantiateMainSceneAsync(visual.transform);
+            if (!instantiated)
+            {
+                Destroy(visual);
+                call = "人型モデルの生成に失敗したため、仮モデルで続行します。";
+                return;
+            }
+
+            var renderers = visual.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+            {
+                Destroy(visual);
+                call = "人型モデルの表示に失敗したため、仮モデルで続行します。";
+                return;
+            }
+
+            foreach (Transform child in actor)
+                if (child != visual.transform) child.gameObject.SetActive(false);
             ApplyRoleMaterials(visual, uniformColor);
             PlayModelAnimation(visual);
             if (addBat) AddBat(visual.transform, uniformColor);
