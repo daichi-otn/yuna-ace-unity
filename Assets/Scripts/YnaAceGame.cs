@@ -358,7 +358,16 @@ namespace YnaAce
         private static GameObject MakePrimitive(PrimitiveType type, string label, Vector3 position, Vector3 scale, Color color)
         {
             var item = GameObject.CreatePrimitive(type); item.name = label; item.transform.position = position; item.transform.localScale = scale;
-            item.GetComponent<Renderer>().material.color = color; return item;
+            var renderer = item.GetComponent<Renderer>();
+            // 実行時生成のPrimitiveはStandardシェーダーになるため、URP/WebGLでは
+            // マゼンタ表示になることがあります。WebGL対応のURPシェーダーを明示します。
+            var shader = Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Universal Render Pipeline/Unlit")
+                         ?? Shader.Find("Standard")
+                         ?? Shader.Find("Unlit/Color");
+            if (shader != null) renderer.material.shader = shader;
+            renderer.material.color = color;
+            return item;
         }
 
         private static Transform MakePlayer(string label, Vector3 position, Color uniform)
