@@ -1,4 +1,6 @@
 using System.Collections;
+using System.Threading.Tasks;
+
 using UnityEngine;
 
 namespace YnaAce
@@ -33,6 +35,7 @@ namespace YnaAce
         private GUIStyle panelStyle;
         private GUIStyle textStyle;
         private GUIStyle smallStyle;
+        private Unity.Cloud.Gltfast.GltfImport playerModel;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -48,6 +51,7 @@ namespace YnaAce
             Physics.gravity = new Vector3(0f, -9.81f, 0f);
             BuildStadium();
             CreatePlayers();
+            LoadRealPlayers();
             CreateBall();
             SetupCamera();
             BeginHalfInning();
@@ -89,6 +93,31 @@ namespace YnaAce
             ballBody.useGravity = false;
             ballBody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             ballStart = ball.position;
+        }
+
+        private async void LoadRealPlayers()
+        {
+            var model = new Unity.Cloud.Gltfast.GltfImport();
+            string modelUrl = Application.streamingAssetsPath + "/Players/FoodCourier.glb";
+            if (!await model.LoadAsync(modelUrl))
+            {
+                call = "人型モデルを読み込めなかったため、仮モデルで続行します。";
+                return;
+            }
+
+            playerModel = model;
+            await ReplaceWithRealModel(pitcher);
+            await ReplaceWithRealModel(batter);
+            await ReplaceWithRealModel(runner);
+        }
+
+        private async Task ReplaceWithRealModel(Transform actor)
+        {
+            foreach (Transform child in actor) child.gameObject.SetActive(false);
+            var visual = new GameObject(actor.name + " リアルモデル");
+            visual.transform.SetParent(actor, false);
+            visual.transform.localScale = Vector3.one * 1.15f;
+            await playerModel.InstantiateMainSceneAsync(visual.transform);
         }
 
         private void SetupCamera()
