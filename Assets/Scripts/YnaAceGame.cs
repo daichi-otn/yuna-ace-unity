@@ -12,6 +12,8 @@ namespace YnaAce
         private Transform pitcher;
         private Transform batter;
         private Transform runner;
+        private Transform catcher;
+        private Transform umpire;
         private Transform ball;
         private Rigidbody ballBody;
         private Vector3 ballStart;
@@ -79,8 +81,8 @@ namespace YnaAce
         {
             pitcher = MakePlayer("CPU ピッチャー", new Vector3(0f, 0f, 18.44f), new Color(0.2f, 0.42f, 0.95f));
             batter = MakePlayer("あなた（打者）", new Vector3(-0.9f, 0f, -0.25f), new Color(0.93f, 0.23f, 0.16f));
-            MakePlayer("キャッチャー", new Vector3(0f, 0f, -1.4f), new Color(0.12f, 0.12f, 0.15f));
-            MakePlayer("審判", new Vector3(0.75f, 0f, -2.1f), new Color(0.08f, 0.08f, 0.1f));
+            catcher = MakePlayer("キャッチャー", new Vector3(0f, 0f, -1.4f), new Color(0.12f, 0.12f, 0.15f));
+            umpire = MakePlayer("審判", new Vector3(0.75f, 0f, -2.1f), new Color(0.08f, 0.08f, 0.1f));
             runner = MakePlayer("走者", new Vector3(-0.4f, 0f, 0.9f), new Color(0.98f, 0.72f, 0.1f));
             runner.gameObject.SetActive(false);
         }
@@ -106,18 +108,52 @@ namespace YnaAce
             }
 
             playerModel = model;
-            await ReplaceWithRealModel(pitcher);
-            await ReplaceWithRealModel(batter);
-            await ReplaceWithRealModel(runner);
+            await ReplaceWithRealModel(pitcher, new Color(0.12f, 0.3f, 0.9f));
+            await ReplaceWithRealModel(batter, new Color(0.85f, 0.12f, 0.08f), true);
+            await ReplaceWithRealModel(runner, new Color(0.95f, 0.65f, 0.08f));
+            await ReplaceWithRealModel(catcher, new Color(0.08f, 0.1f, 0.16f));
+            await ReplaceWithRealModel(umpire, new Color(0.03f, 0.03f, 0.04f));
         }
 
-        private async Task ReplaceWithRealModel(Transform actor)
+        private async Task ReplaceWithRealModel(Transform actor, Color uniformColor, bool addBat = false)
         {
             foreach (Transform child in actor) child.gameObject.SetActive(false);
             var visual = new GameObject(actor.name + " リアルモデル");
             visual.transform.SetParent(actor, false);
             visual.transform.localScale = Vector3.one * 1.15f;
             await playerModel.InstantiateMainSceneAsync(visual.transform);
+            ApplyRoleMaterials(visual, uniformColor);
+            PlayModelAnimation(visual);
+            if (addBat) AddBat(visual.transform, uniformColor);
+        }
+
+        private static void ApplyRoleMaterials(GameObject visual, Color uniformColor)
+        {
+            foreach (var renderer in visual.GetComponentsInChildren<Renderer>(true))
+            {
+                foreach (var material in renderer.materials)
+                {
+                    string name = material.name.ToLowerInvariant();
+                    if (name.Contains("skin") || name.Contains("face") || name.Contains("body"))
+                        material.color = new Color(0.86f, 0.54f, 0.34f);
+                    else if (!name.Contains("hair") && !name.Contains("shoe"))
+                        material.color = uniformColor;
+                }
+            }
+        }
+
+        private static void PlayModelAnimation(GameObject visual)
+        {
+            var animation = visual.GetComponentInChildren<Animation>(true);
+            if (animation != null && animation.clip != null) animation.Play(animation.clip.name);
+        }
+
+        private static void AddBat(Transform parent, Color uniformColor)
+        {
+            var bat = MakePrimitive(PrimitiveType.Cylinder, "バット", parent.position, new Vector3(0.06f, 0.65f, 0.06f), new Color(0.35f, 0.12f, 0.03f));
+            bat.transform.SetParent(parent, false);
+            bat.transform.localPosition = new Vector3(0.55f, 1.15f, 0.16f);
+            bat.transform.localRotation = Quaternion.Euler(20f, 0f, 68f);
         }
 
         private void SetupCamera()
