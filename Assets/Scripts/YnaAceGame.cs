@@ -359,13 +359,18 @@ namespace YnaAce
         {
             var item = GameObject.CreatePrimitive(type); item.name = label; item.transform.position = position; item.transform.localScale = scale;
             var renderer = item.GetComponent<Renderer>();
-            // 実行時生成のPrimitiveはStandardシェーダーになるため、URP/WebGLでは
-            // マゼンタ表示になることがあります。WebGL対応のURPシェーダーを明示します。
-            var shader = Shader.Find("Universal Render Pipeline/Lit")
-                         ?? Shader.Find("Universal Render Pipeline/Unlit")
-                         ?? Shader.Find("Standard")
-                         ?? Shader.Find("Unlit/Color");
-            if (shader != null) renderer.material.shader = shader;
+            // Resourcesに含めたWebGL対応マテリアルを使い、シェーダー stripping による
+            // マゼンタ表示を防ぎます。フォールバックも残してEditor実行時の復旧性を確保します。
+            var baseMaterial = Resources.Load<Material>("YnaAceMaterial");
+            if (baseMaterial != null)
+            {
+                renderer.material = new Material(baseMaterial);
+            }
+            else
+            {
+                var shader = Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                if (shader != null) renderer.material.shader = shader;
+            }
             renderer.material.color = color;
             return item;
         }
