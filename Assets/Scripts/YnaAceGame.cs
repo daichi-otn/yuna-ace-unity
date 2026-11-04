@@ -32,6 +32,7 @@ namespace YnaAce
         private GUIStyle titleStyle;
         private GUIStyle panelStyle;
         private GUIStyle textStyle;
+        private GUIStyle smallStyle;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -316,22 +317,50 @@ namespace YnaAce
             batter.localRotation = Quaternion.Euler(0f, 180f + sway, 0f);
             pitcher.localRotation = Quaternion.Euler(0f, sway, 0f);
             if (pitching) pitcher.localRotation *= Quaternion.Euler(Mathf.Sin(Time.time * 12f) * 10f, 0f, 0f);
+            AnimateActor(pitcher, Time.time * 5f, pitching);
+            AnimateActor(batter, Time.time * 4f + 1f, pitching && role == "打者");
+            if (runner.gameObject.activeSelf) AnimateActor(runner, Time.time * 9f, true);
+        }
+
+        private static void AnimateActor(Transform actor, float clock, bool active)
+        {
+            var leftArm = actor.Find("腕L");
+            var rightArm = actor.Find("腕R");
+            var leftLeg = actor.Find("脚L");
+            var rightLeg = actor.Find("脚R");
+            if (leftArm == null || rightArm == null || leftLeg == null || rightLeg == null) return;
+            float step = active ? Mathf.Sin(clock) * 24f : Mathf.Sin(clock * 0.5f) * 3f;
+            leftArm.localRotation = Quaternion.Euler(-step, 0f, -8f);
+            rightArm.localRotation = Quaternion.Euler(step, 0f, 8f);
+            leftLeg.localRotation = Quaternion.Euler(step * 0.65f, 0f, 0f);
+            rightLeg.localRotation = Quaternion.Euler(-step * 0.65f, 0f, 0f);
         }
 
         private void OnGUI()
         {
             if (titleStyle == null) ConfigureGui();
             GUI.Label(new Rect(24, 18, 500, 44), "YNA ACE  UNITY WEBGL", titleStyle);
-            GUI.Box(new Rect(24, 72, 360, 120), "", panelStyle);
-            GUI.Label(new Rect(40, 84, 330, 96), "" + inning + "回　役割：" + role + "\nスコア：あなた " + playerScore + " - CPU " + cpuScore + "\nB " + balls + "   S " + strikes + "   O " + outs + "\n" + call, textStyle);
-            GUI.Box(new Rect(Screen.width - 224, 22, 200, 250), "", panelStyle);
-            GUI.Label(new Rect(Screen.width - 208, 34, 168, 26), "狙うストライクゾーン", textStyle);
+            GUI.Box(new Rect(24, 72, 390, 150), "", panelStyle);
+            GUI.Label(new Rect(40, 84, 360, 132), "あなたの役：" + role + "\n" + inning + "回" + (playerBatting ? "表" : "裏") + "\n\n" + call, textStyle);
+
+            // 元のWeb版に合わせた右上のラインスコアとカウント。
+            GUI.Box(new Rect(Screen.width - 390, 22, 366, 150), "", panelStyle);
+            GUI.Label(new Rect(Screen.width - 374, 34, 340, 26), "イニング　1 2 3 4 5 6 7 8 9　計", smallStyle);
+            GUI.Label(new Rect(Screen.width - 374, 65, 340, 28), "あなた　　" + ScoreLine(playerScore) + "　" + playerScore, textStyle);
+            GUI.Label(new Rect(Screen.width - 374, 95, 340, 28), "CPU　　　" + ScoreLine(cpuScore) + "　" + cpuScore, textStyle);
+            GUI.Label(new Rect(Screen.width - 374, 130, 340, 28), "B " + balls + "　S " + strikes + "　O " + outs + "　　" + (runner.gameObject.activeSelf ? "走者あり" : "走者なし"), smallStyle);
+
+            int gridSize = Mathf.Clamp(Screen.width / 14, 42, 62);
+            int gridWidth = gridSize * 5 + 4 * 4;
+            int gridX = (Screen.width - gridWidth) / 2;
+            int gridY = Screen.height - gridSize * 5 - 110;
+            GUI.Label(new Rect(gridX, gridY - 30, gridWidth, 26), role == "投手" ? "投げるコース" : "打つコース（予想位置）", textStyle);
             for (int y = 0; y < 5; y++) for (int x = 0; x < 5; x++)
             {
-                Rect cell = new Rect(Screen.width - 204 + x * 34, 70 + y * 34, 30, 30);
+                Rect cell = new Rect(gridX + x * (gridSize + 4), gridY + y * (gridSize + 4), gridSize, gridSize);
                 bool strike = x is >= 1 and <= 3 && y is >= 1 and <= 3;
                 Color old = GUI.color;
-                GUI.color = strike ? new Color(0.8f, 0.92f, 1f) : new Color(0.5f, 0.55f, 0.62f);
+                GUI.color = strike ? new Color(0.24f, 0.58f, 0.82f, 0.95f) : new Color(0.05f, 0.1f, 0.16f, 0.9f);
                 if (GUI.Button(cell, ""))
                 {
                     target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
@@ -340,7 +369,12 @@ namespace YnaAce
                 }
                 GUI.color = old;
             }
-            GUI.Label(new Rect(Screen.width - 208, 248, 180, 22), gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : "SPACE/クリック：スイング"), textStyle);
+            GUI.Label(new Rect(gridX, gridY + gridSize * 5 + 16, gridWidth, 26), gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : "SPACE/クリック：スイング　　P：一時停止　　A/D：走塁"), smallStyle);
+        }
+
+        private static string ScoreLine(int score)
+        {
+            return score == 0 ? "-  -  -  -  -  -  -  -  -" : "-  -  -  -  " + score + "  -  -  -  -";
         }
 
         private void ConfigureGui()
@@ -348,6 +382,7 @@ namespace YnaAce
             titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
             panelStyle = new GUIStyle(GUI.skin.box) { normal = { background = MakeTexture(new Color(0.02f, 0.04f, 0.09f, 0.82f)) } };
             textStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true, normal = { textColor = Color.white } };
+            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = Color.white } };
         }
 
         private static Texture2D MakeTexture(Color color)
@@ -378,9 +413,25 @@ namespace YnaAce
         private static Transform MakePlayer(string label, Vector3 position, Color uniform)
         {
             var root = new GameObject(label); root.transform.position = position;
-            var body = MakePrimitive(PrimitiveType.Capsule, label + " 本体", position + Vector3.up, new Vector3(0.62f, 1f, 0.62f), uniform); body.transform.SetParent(root.transform);
-            var head = MakePrimitive(PrimitiveType.Sphere, label + " 頭", position + Vector3.up * 2.05f, Vector3.one * 0.42f, new Color(0.92f, 0.67f, 0.48f)); head.transform.SetParent(root.transform);
+            MakePart(root.transform, PrimitiveType.Capsule, "胴体", new Vector3(0f, 1.05f, 0f), new Vector3(0.62f, 0.78f, 0.42f), uniform, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "頭", new Vector3(0f, 2.15f, 0f), Vector3.one * 0.42f, new Color(0.92f, 0.67f, 0.48f), Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Capsule, "腕L", new Vector3(-0.48f, 1.15f, 0f), new Vector3(0.18f, 0.55f, 0.18f), uniform, new Vector3(0f, 0f, -12f));
+            MakePart(root.transform, PrimitiveType.Capsule, "腕R", new Vector3(0.48f, 1.15f, 0f), new Vector3(0.18f, 0.55f, 0.18f), uniform, new Vector3(0f, 0f, 12f));
+            MakePart(root.transform, PrimitiveType.Capsule, "脚L", new Vector3(-0.22f, 0.05f, 0f), new Vector3(0.22f, 0.65f, 0.22f), uniform, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Capsule, "脚R", new Vector3(0.22f, 0.05f, 0f), new Vector3(0.22f, 0.65f, 0.22f), uniform, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Cylinder, "帽子", new Vector3(0f, 2.52f, 0f), new Vector3(0.46f, 0.12f, 0.46f), uniform * 0.8f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "グローブ", new Vector3(0.66f, 1.03f, 0.14f), Vector3.one * 0.19f, new Color(0.2f, 0.09f, 0.03f), Vector3.zero);
             return root.transform;
+        }
+
+        private static GameObject MakePart(Transform parent, PrimitiveType type, string name, Vector3 localPosition, Vector3 scale, Color color, Vector3 rotation)
+        {
+            var part = MakePrimitive(type, name, parent.position, scale, color);
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localRotation = Quaternion.Euler(rotation);
+            part.transform.localScale = scale;
+            return part;
         }
     }
 }
