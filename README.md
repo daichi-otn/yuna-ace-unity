@@ -26,3 +26,7 @@ Unity build . --editor-version 6000.6.7f1 --target WebGL --execute-method YnaAce
 ```
 
 ビルド後は、`Build/WebGL` をローカル HTTP サーバーで配信してブラウザから開きます。`file://` で直接開くことはできません。
+
+## GitHub Pages
+
+`.github/workflows/pages.yml` は `Build/WebGL` を GitHub Pages に公開します。GitHubリポジトリの Pages 設定で Source を `GitHub Actions` にしてから、`main` にpushしてください。
