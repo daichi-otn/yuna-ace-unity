@@ -136,8 +136,8 @@ namespace YnaAce
                 return;
             }
 
-            foreach (Transform child in actor)
-                if (child != visual.transform) child.gameObject.SetActive(false);
+            // WebGLではモデルのシェーダー準備が遅れることがあるため、
+            // 仮モデルは残して表示保証にする。リアルモデルはその上に重ねる。
             ApplyRoleMaterials(visual, uniformColor);
             PlayModelAnimation(visual);
             if (addBat) AddBat(visual.transform, uniformColor);
