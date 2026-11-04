@@ -119,7 +119,7 @@ namespace YnaAce
         {
             var visual = new GameObject(actor.name + " リアルモデル");
             visual.transform.SetParent(actor, false);
-            visual.transform.localScale = Vector3.one * 1.15f;
+            visual.transform.localScale = Vector3.one;
             bool instantiated = await playerModel.InstantiateMainSceneAsync(visual.transform);
             if (!instantiated)
             {
@@ -136,11 +136,26 @@ namespace YnaAce
                 return;
             }
 
-            // WebGLではモデルのシェーダー準備が遅れることがあるため、
-            // 仮モデルは残して表示保証にする。リアルモデルはその上に重ねる。
+            var bounds = renderers[0].bounds;
+            foreach (var renderer in renderers) bounds.Encapsulate(renderer.bounds);
+            if (bounds.size.y < 0.01f)
+            {
+                Destroy(visual);
+                call = "人型モデルの寸法を取得できなかったため、仮モデルで続行します。";
+                return;
+            }
+
+            // glTF素材ごとの単位差を吸収し、実寸約1.8mに統一して足元を地面へ合わせる。
+            float modelScale = 1.8f / bounds.size.y;
+            visual.transform.localScale = Vector3.one * modelScale;
+            visual.transform.localPosition = new Vector3(0f, -bounds.min.y * modelScale, 0f);
             ApplyRoleMaterials(visual, uniformColor);
             PlayModelAnimation(visual);
             if (addBat) AddBat(visual.transform, uniformColor);
+
+            // 正しい大きさの実モデルが生成できた後で、カプセル仮モデルだけを隠す。
+            foreach (Transform child in actor)
+                if (child != visual.transform) child.gameObject.SetActive(false);
         }
 
         private static void ApplyRoleMaterials(GameObject visual, Color uniformColor)
