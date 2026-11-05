@@ -643,11 +643,12 @@ namespace YnaAce
 
         private void ConfigureGui()
         {
-            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
+            var japaneseFont = Resources.Load<Font>("NotoSansJP");
+            titleStyle = new GUIStyle(GUI.skin.label) { font = japaneseFont, fontSize = 26, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
             panelStyle = new GUIStyle(GUI.skin.box) { normal = { background = MakeTexture(new Color(0.02f, 0.04f, 0.09f, 0.82f)) } };
-            textStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true, normal = { textColor = Color.white } };
-            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = Color.white } };
-            targetStyle = new GUIStyle(GUI.skin.label) { fontSize = 24, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, normal = { textColor = new Color(1f, 0.78f, 0.18f) } };
+            textStyle = new GUIStyle(GUI.skin.label) { font = japaneseFont, fontSize = 15, wordWrap = true, normal = { textColor = Color.white } };
+            smallStyle = new GUIStyle(GUI.skin.label) { font = japaneseFont, fontSize = 13, normal = { textColor = Color.white } };
+            targetStyle = new GUIStyle(GUI.skin.label) { font = japaneseFont, fontSize = 24, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, normal = { textColor = new Color(1f, 0.78f, 0.18f) } };
         }
 
         private static Texture2D MakeTexture(Color color)
@@ -658,6 +659,14 @@ namespace YnaAce
         private static GameObject MakePrimitive(PrimitiveType type, string label, Vector3 position, Vector3 scale, Color color)
         {
             var item = GameObject.CreatePrimitive(type); item.name = label; item.transform.position = position; item.transform.localScale = scale;
+            // WebGLのmanaged strippingでCreatePrimitiveが内部追加するCollider型が
+            // 除外されないよう、球とカプセルの型をこのアセンブリから明示参照します。
+            if (type == PrimitiveType.Sphere && item.GetComponent<SphereCollider>() == null)
+                item.AddComponent<SphereCollider>();
+            else if (type == PrimitiveType.Capsule && item.GetComponent<CapsuleCollider>() == null)
+                item.AddComponent<CapsuleCollider>();
+            else if (type == PrimitiveType.Plane && item.GetComponent<MeshCollider>() == null)
+                item.AddComponent<MeshCollider>();
             var renderer = item.GetComponent<Renderer>();
             // Resourcesに含めたWebGL対応マテリアルを使い、シェーダー stripping による
             // マゼンタ表示を防ぎます。フォールバックも残してEditor実行時の復旧性を確保します。
