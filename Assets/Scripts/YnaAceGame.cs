@@ -2,6 +2,7 @@ using System.Collections;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace YnaAce
 {
@@ -21,6 +22,8 @@ namespace YnaAce
         private float pitchStart;
         private float pitchDuration;
         private bool pitching;
+        private bool pitchInFlight;
+        private bool ballInPlay;
         private bool paused;
         private bool swung;
         private int strikes;
@@ -28,21 +31,26 @@ namespace YnaAce
         private int outs;
         private int playerScore;
         private int cpuScore;
+        private readonly int[] playerInningRuns = new int[30];
+        private readonly int[] cpuInningRuns = new int[30];
+        private readonly bool[] bases = new bool[3];
         private int inning = 1;
         private bool playerBatting = true;
         private bool gameOver;
+        private bool changingHalf;
         private string role = "打者";
         private string call = "ストライクゾーンを選び、来た球を SPACE またはクリックで打ってください。";
         private GUIStyle titleStyle;
         private GUIStyle panelStyle;
         private GUIStyle textStyle;
         private GUIStyle smallStyle;
+        private GUIStyle targetStyle;
         private Unity.Cloud.Gltfast.GltfImport playerModel;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
         {
-            if (FindFirstObjectByType<YnaAceGame>() == null)
+            if (FindAnyObjectByType<YnaAceGame>() == null)
             {
                 new GameObject("YNA ACE Game").AddComponent<YnaAceGame>();
             }
@@ -160,16 +168,36 @@ namespace YnaAce
 
         private static void ApplyRoleMaterials(GameObject visual, Color uniformColor)
         {
+            var webGlMaterial = Resources.Load<Material>("YnaAceMaterial");
+            if (webGlMaterial == null) return;
+
             foreach (var renderer in visual.GetComponentsInChildren<Renderer>(true))
             {
-                foreach (var material in renderer.materials)
+                var importedMaterials = renderer.materials;
+                var safeMaterials = new Material[importedMaterials.Length];
+                for (int i = 0; i < importedMaterials.Length; i++)
                 {
-                    string name = material.name.ToLowerInvariant();
-                    if (name.Contains("skin") || name.Contains("face") || name.Contains("body"))
-                        material.color = new Color(0.86f, 0.54f, 0.34f);
-                    else if (!name.Contains("hair") && !name.Contains("shoe"))
-                        material.color = uniformColor;
+                    var imported = importedMaterials[i];
+                    var safe = new Material(webGlMaterial) { color = uniformColor };
+                    if (imported != null)
+                    {
+                        Texture colorTexture = null;
+                        if (imported.HasProperty("baseColorTexture"))
+                            colorTexture = imported.GetTexture("baseColorTexture");
+                        else if (imported.HasProperty("_BaseMap"))
+                            colorTexture = imported.GetTexture("_BaseMap");
+                        else if (imported.HasProperty("_MainTex"))
+                            colorTexture = imported.GetTexture("_MainTex");
+
+                        if (colorTexture != null)
+                        {
+                            if (safe.HasProperty("_BaseMap")) safe.SetTexture("_BaseMap", colorTexture);
+                            else if (safe.HasProperty("_MainTex")) safe.SetTexture("_MainTex", colorTexture);
+                        }
+                    }
+                    safeMaterials[i] = safe;
                 }
+                renderer.materials = safeMaterials;
             }
         }
 
@@ -198,32 +226,40 @@ namespace YnaAce
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.P)) paused = !paused;
+            if (KeyPressed(Key.P))
+            {
+                paused = !paused;
+                Time.timeScale = paused ? 0f : 1f;
+            }
             if (paused) return;
             if (gameOver)
             {
-                if (Input.GetKeyDown(KeyCode.R)) RestartGame();
+                if (KeyPressed(Key.R)) RestartGame();
                 return;
             }
-            if (Input.GetKeyDown(KeyCode.Space) || Input.GetMouseButtonDown(0)) Swing();
-            if (Input.GetKeyDown(KeyCode.A)) MoveRunner(-1f);
-            if (Input.GetKeyDown(KeyCode.D)) MoveRunner(1f);
-            if (!pitching && role == "打者" && Input.GetKeyDown(KeyCode.Return)) StartCoroutine(ThrowPitch());
+            if (KeyPressed(Key.Space) || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)) Swing();
+            if (KeyPressed(Key.A)) MoveRunner(-1f);
+            if (KeyPressed(Key.D)) MoveRunner(1f);
+            if (!pitching && !ballInPlay && !changingHalf && role == "打者" && KeyPressed(Key.Enter)) StartCoroutine(ThrowPitch());
             AnimatePlayers();
         }
+
+        private static bool KeyPressed(Key key) => Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame;
 
         private IEnumerator ThrowPitch()
         {
             pitching = true;
+            pitchInFlight = false;
             swung = false;
             ballBody.isKinematic = true;
             ballBody.useGravity = false;
             ballStart = new Vector3(0f, 1.85f, 17.5f);
             ball.position = ballStart;
-            call = "ピッチャーがうなずいた……投球！";
-            yield return new WaitForSeconds(0.75f);
+            call = "ピッチャーがうなずいた。1.8秒後に投球します。";
+            yield return new WaitForSeconds(1.8f);
             pitchStart = Time.time;
             pitchDuration = Random.Range(0.72f, 1.25f);
+            pitchInFlight = true;
             while (Time.time - pitchStart < pitchDuration)
             {
                 float t = (Time.time - pitchStart) / pitchDuration;
@@ -238,11 +274,13 @@ namespace YnaAce
                 else ResolveCpuAtPlate();
             }
             pitching = false;
+            pitchInFlight = false;
+            swung = false;
         }
 
         private void Swing()
         {
-            if (!pitching || swung || role != "打者") return;
+            if (!pitching || !pitchInFlight || swung || role != "打者") return;
             swung = true;
             float timing = Mathf.Abs((Time.time - pitchStart) / pitchDuration - 0.86f);
             float distance = Vector3.Distance(ball.position, new Vector3(-0.15f, 1.05f, 0.35f));
@@ -250,6 +288,8 @@ namespace YnaAce
             {
                 StopAllCoroutines();
                 pitching = false;
+                pitchInFlight = false;
+                ballInPlay = true;
                 ballBody.isKinematic = false;
                 ballBody.useGravity = true;
                 ballBody.linearVelocity = new Vector3(Random.Range(-7f, 7f), Random.Range(7f, 11f), Random.Range(12f, 20f));
@@ -272,7 +312,7 @@ namespace YnaAce
             {
                 balls++;
                 call = "CPU打者は見送った。ボール。";
-                if (balls >= 4) { runner.gameObject.SetActive(true); call = "CPU打者、フォアボール。"; ResetCount(); }
+                if (balls >= 4) AwardWalk(false);
                 ResetBall();
                 return;
             }
@@ -290,6 +330,7 @@ namespace YnaAce
                 ballBody.useGravity = true;
                 ballBody.linearVelocity = new Vector3(Random.Range(-6f, 6f), Random.Range(6f, 10f), Random.Range(11f, 19f));
                 call = "CPU打者が打った！ 守備へ！";
+                ballInPlay = true;
                 StartCoroutine(FieldBall(false));
                 return;
             }
@@ -313,11 +354,25 @@ namespace YnaAce
             }
             else
             {
-                if (playerHit) playerScore++; else cpuScore++;
+                bool[] oldBases = (bool[])bases.Clone();
+                System.Array.Clear(bases, 0, bases.Length);
+                int runs = 0;
+                for (int i = 0; i < oldBases.Length; i++)
+                {
+                    if (!oldBases[i]) continue;
+                    int destination = i + 1;
+                    if (destination >= bases.Length) runs++;
+                    else bases[destination] = true;
+                }
+                bases[0] = true;
+                AddRuns(playerHit, runs);
                 runner.gameObject.SetActive(true);
-                call = playerHit ? "打球は抜けた！ あなたに1点追加！" : "打球が外野を抜けた。CPUに1点。";
+                SyncRunnerVisual();
+                call = runs > 0 ? "走者が生還！ " + runs + "点入りました。打者は一塁へ。" : "打球が抜けた！ 打者は一塁、走者は進塁！";
             }
             ResetBall();
+            ballInPlay = false;
+            swung = false;
         }
 
         private void CountPitch(bool swingMiss)
@@ -325,13 +380,45 @@ namespace YnaAce
             bool inZone = IsStrikeZone();
             if (swingMiss || inZone) strikes++; else balls++;
             if (strikes >= 3) RegisterOut("三振！");
-            if (balls >= 4) { call = "フォアボール。走者が出ました。"; runner.gameObject.SetActive(true); ResetCount(); }
+            else if (balls >= 4) AwardWalk(playerBatting);
             ResetBall();
+        }
+
+        private void AwardWalk(bool playerOnOffense)
+        {
+            if (bases[0] && bases[1] && bases[2])
+            {
+                AddRuns(playerOnOffense, 1);
+            }
+            if (bases[0] && bases[1]) bases[2] = true;
+            if (bases[0]) bases[1] = true;
+            bases[0] = true;
+            runner.gameObject.SetActive(true);
+            SyncRunnerVisual();
+            call = "フォアボール。押し出しを含め走者が進塁しました。";
+            ResetCount();
+        }
+
+        private void AddRuns(bool playerOnOffense, int runs)
+        {
+            if (runs <= 0) return;
+            int index = Mathf.Clamp(inning - 1, 0, playerInningRuns.Length - 1);
+            if (playerOnOffense)
+            {
+                playerScore += runs;
+                playerInningRuns[index] += runs;
+            }
+            else
+            {
+                cpuScore += runs;
+                cpuInningRuns[index] += runs;
+            }
         }
 
         private void ResetBall()
         {
             pitching = false;
+            pitchInFlight = false;
             ballBody.isKinematic = true;
             ballBody.useGravity = false;
             ball.position = ballStart;
@@ -344,13 +431,15 @@ namespace YnaAce
             outs++;
             call = message;
             ResetCount();
-            if (outs >= 3) StartCoroutine(ChangeHalfInning());
+            if (outs >= 3 && !changingHalf) StartCoroutine(ChangeHalfInning());
         }
 
         private IEnumerator ChangeHalfInning()
         {
+            changingHalf = true;
             yield return new WaitForSeconds(1.6f);
-            if (playerBatting && inning >= 9 && playerScore < cpuScore)
+            // 9回表終了時、後攻が既にリードしていれば9回裏を行わず終了。
+            if (playerBatting && inning >= 9 && cpuScore > playerScore)
             {
                 FinishGame();
                 yield break;
@@ -363,13 +452,17 @@ namespace YnaAce
             if (!playerBatting) inning++;
             playerBatting = !playerBatting;
             BeginHalfInning();
+            changingHalf = false;
         }
 
         private void BeginHalfInning()
         {
             outs = 0;
             ResetCount();
+            ballInPlay = false;
             runner.gameObject.SetActive(false);
+            System.Array.Clear(bases, 0, bases.Length);
+            runner.position = new Vector3(-0.4f, 0f, 0.9f);
             pitcher.position = new Vector3(0f, 0f, 18.44f);
             role = playerBatting ? "打者" : "投手";
             call = inning + "回" + (playerBatting ? "表：あなたの攻撃です。ENTERで投球を待ちます。" : "裏：あなたの投球です。ゾーンを選んで投げてください。");
@@ -396,15 +489,66 @@ namespace YnaAce
             inning = 1;
             playerBatting = true;
             gameOver = false;
+            changingHalf = false;
+            ballInPlay = false;
+            System.Array.Clear(bases, 0, bases.Length);
+            System.Array.Clear(playerInningRuns, 0, playerInningRuns.Length);
+            System.Array.Clear(cpuInningRuns, 0, cpuInningRuns.Length);
+            paused = false;
+            Time.timeScale = 1f;
             ResetBall();
             BeginHalfInning();
         }
 
         private void MoveRunner(float direction)
         {
-            if (!runner.gameObject.activeSelf) return;
-            runner.position += new Vector3(direction * 0.55f, 0f, 0.55f);
-            call = direction > 0 ? "右足で前へ。走者が進む！" : "左足で姿勢を整える。";
+            if (!runner.gameObject.activeSelf || role != "打者" || pitching || ballInPlay) return;
+            int occupied = -1;
+            for (int i = 2; i >= 0; i--) if (bases[i]) { occupied = i; break; }
+            if (occupied < 0) { call = "走者はいません。"; return; }
+            if (direction > 0)
+            {
+                if (occupied < 2 && bases[occupied + 1])
+                {
+                    call = "前の塁が埋まっています。打球を待ちましょう。";
+                    return;
+                }
+                bases[occupied] = false;
+                if (occupied == 2) AddRuns(true, 1);
+                else bases[occupied + 1] = true;
+                call = occupied == 2 ? "走者がホームイン！ 1点追加！" : "走者が次の塁へ進みました。";
+                SyncRunnerVisual();
+            }
+            else
+            {
+                Vector3 nextBase = occupied == 2 ? new Vector3(0f, 0f, 0f) : BasePosition(occupied + 1);
+                runner.position += (nextBase - runner.position).normalized * 0.55f;
+                call = "左足でリードを取りました。Dで次の塁へ走れます。";
+            }
+        }
+
+        private void SyncRunnerVisual()
+        {
+            int visibleBase = -1;
+            for (int i = bases.Length - 1; i >= 0; i--)
+                if (bases[i]) { visibleBase = i; break; }
+            runner.gameObject.SetActive(visibleBase >= 0);
+            if (visibleBase >= 0) runner.position = BasePosition(visibleBase);
+        }
+
+        private static Vector3 BasePosition(int baseIndex)
+        {
+            return baseIndex switch
+            {
+                0 => new Vector3(8f, 0f, 8f),
+                1 => new Vector3(0f, 0f, 16f),
+                _ => new Vector3(-8f, 0f, 8f)
+            };
+        }
+
+        private void OnDisable()
+        {
+            Time.timeScale = 1f;
         }
 
         private void AnimatePlayers()
@@ -435,21 +579,27 @@ namespace YnaAce
         private void OnGUI()
         {
             if (titleStyle == null) ConfigureGui();
+            Matrix4x4 previousMatrix = GUI.matrix;
+            float uiScale = Mathf.Min(1f, Mathf.Min(Screen.width / 1280f, Screen.height / 720f));
+            uiScale = Mathf.Max(0.35f, uiScale);
+            GUI.matrix = Matrix4x4.Scale(new Vector3(uiScale, uiScale, 1f));
+            float uiWidth = Screen.width / uiScale;
+            float uiHeight = Screen.height / uiScale;
             GUI.Label(new Rect(24, 18, 500, 44), "YNA ACE  UNITY WEBGL", titleStyle);
             GUI.Box(new Rect(24, 72, 390, 150), "", panelStyle);
             GUI.Label(new Rect(40, 84, 360, 132), "あなたの役：" + role + "\n" + inning + "回" + (playerBatting ? "表" : "裏") + "\n\n" + call, textStyle);
 
             // 元のWeb版に合わせた右上のラインスコアとカウント。
-            GUI.Box(new Rect(Screen.width - 390, 22, 366, 150), "", panelStyle);
-            GUI.Label(new Rect(Screen.width - 374, 34, 340, 26), "イニング　1 2 3 4 5 6 7 8 9　計", smallStyle);
-            GUI.Label(new Rect(Screen.width - 374, 65, 340, 28), "あなた　　" + ScoreLine(playerScore) + "　" + playerScore, textStyle);
-            GUI.Label(new Rect(Screen.width - 374, 95, 340, 28), "CPU　　　" + ScoreLine(cpuScore) + "　" + cpuScore, textStyle);
-            GUI.Label(new Rect(Screen.width - 374, 130, 340, 28), "B " + balls + "　S " + strikes + "　O " + outs + "　　" + (runner.gameObject.activeSelf ? "走者あり" : "走者なし"), smallStyle);
+            GUI.Box(new Rect(uiWidth - 390, 22, 366, 150), "", panelStyle);
+            GUI.Label(new Rect(uiWidth - 374, 34, 340, 26), "イニング　1 2 3 4 5 6 7 8 9　計", smallStyle);
+            GUI.Label(new Rect(uiWidth - 374, 65, 340, 28), "あなた　　" + ScoreLine(playerInningRuns) + "計 " + playerScore, textStyle);
+            GUI.Label(new Rect(uiWidth - 374, 95, 340, 28), "CPU　　　" + ScoreLine(cpuInningRuns) + "計 " + cpuScore, textStyle);
+            GUI.Label(new Rect(uiWidth - 374, 130, 340, 28), "B " + balls + "　S " + strikes + "　O " + outs + "　塁 " + (bases[2] ? "●" : "○") + (bases[1] ? "●" : "○") + (bases[0] ? "●" : "○"), smallStyle);
 
-            int gridSize = Mathf.Clamp(Screen.width / 14, 42, 62);
+            int gridSize = Mathf.Clamp((int)(uiWidth / 14f), 42, 62);
             int gridWidth = gridSize * 5 + 4 * 4;
-            int gridX = (Screen.width - gridWidth) / 2;
-            int gridY = Screen.height - gridSize * 5 - 110;
+            int gridX = (int)((uiWidth - gridWidth) / 2f);
+            int gridY = (int)(uiHeight - gridSize * 5 - 110);
             GUI.Label(new Rect(gridX, gridY - 30, gridWidth, 26), role == "投手" ? "投げるコース" : "打つコース（予想位置）", textStyle);
             for (int y = 0; y < 5; y++) for (int x = 0; x < 5; x++)
             {
@@ -459,18 +609,36 @@ namespace YnaAce
                 GUI.color = strike ? new Color(0.24f, 0.58f, 0.82f, 0.95f) : new Color(0.05f, 0.1f, 0.16f, 0.9f);
                 if (GUI.Button(cell, ""))
                 {
-                    target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
-                    if (role == "投手" && !pitching && !gameOver) StartCoroutine(ThrowPitch());
-                    else if (role == "打者" && !pitching) call = "狙いを定めました。ENTER で投球を待ちます。";
+                    if (!pitching && !ballInPlay && !changingHalf && !gameOver)
+                    {
+                        target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
+                        if (role == "投手") StartCoroutine(ThrowPitch());
+                        else if (role == "打者") call = "狙いを定めました。ENTER または投球ボタンで開始。";
+                    }
                 }
                 GUI.color = old;
+                bool isSelected = Mathf.Abs(target.x - (x - 2) * 0.38f) < 0.01f && Mathf.Abs(target.y - (1.38f - y * 0.2f)) < 0.01f;
+                if (isSelected) GUI.Label(cell, "●", targetStyle);
             }
-            GUI.Label(new Rect(gridX, gridY + gridSize * 5 + 16, gridWidth, 26), gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : "SPACE/クリック：スイング　　P：一時停止　　A/D：走塁"), smallStyle);
+            Rect actionRect = new Rect(gridX, gridY + gridSize * 5 + 16, gridWidth, 32);
+            if (role == "打者" && !pitching && !ballInPlay && !changingHalf && !gameOver)
+            {
+                if (GUI.Button(actionRect, "投球を待つ（ENTER）")) StartCoroutine(ThrowPitch());
+            }
+            else
+            {
+                GUI.Label(actionRect, gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : (ballInPlay ? "打球処理中" : "SPACE/クリック：スイング　P：停止　A/D：走塁")), smallStyle);
+            }
+            GUI.matrix = previousMatrix;
         }
 
-        private static string ScoreLine(int score)
+        private string ScoreLine(int[] runs)
         {
-            return score == 0 ? "-  -  -  -  -  -  -  -  -" : "-  -  -  -  " + score + "  -  -  -  -";
+            var innings = new System.Text.StringBuilder();
+            int shown = Mathf.Min(Mathf.Max(9, inning), runs.Length);
+            for (int i = 1; i <= shown; i++)
+                innings.Append(runs[i - 1]).Append(' ');
+            return innings.ToString();
         }
 
         private void ConfigureGui()
@@ -479,6 +647,7 @@ namespace YnaAce
             panelStyle = new GUIStyle(GUI.skin.box) { normal = { background = MakeTexture(new Color(0.02f, 0.04f, 0.09f, 0.82f)) } };
             textStyle = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true, normal = { textColor = Color.white } };
             smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = Color.white } };
+            targetStyle = new GUIStyle(GUI.skin.label) { fontSize = 24, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, normal = { textColor = new Color(1f, 0.78f, 0.18f) } };
         }
 
         private static Texture2D MakeTexture(Color color)

@@ -11,3 +11,4 @@ Data/
 *.slnx
 .vscode/
 .DS_Store
+ProjectSettings/Packages/com.unity.pipeline/EditorPipelineConfig.json
