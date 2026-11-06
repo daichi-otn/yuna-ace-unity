@@ -42,6 +42,32 @@ namespace YnaAce.Editor
             {
                 throw new BuildFailedException("WebGL ビルドに失敗しました: " + report.summary.result);
             }
+
+            PatchResponsiveWebPlayer(outputPath);
+        }
+
+        private static void PatchResponsiveWebPlayer(string outputPath)
+        {
+            var indexPath = Path.Combine(outputPath, "index.html");
+            var html = File.ReadAllText(indexPath);
+            html = html.Replace("<html lang=\"en-us\">", "<html lang=\"ja\">");
+            html = html.Replace(
+                "<meta charset=\"utf-8\">",
+                "<meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">");
+            html = html.Replace(
+                "if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {",
+                "if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 960) {");
+            File.WriteAllText(indexPath, html);
+
+            var stylePath = Path.Combine(outputPath, "TemplateData", "style.css");
+            var css = File.ReadAllText(stylePath);
+            css = css.Replace(
+                "body { padding: 0; margin: 0 }",
+                "html, body { width: 100%; height: 100%; padding: 0; margin: 0; overflow: hidden }");
+            css = css.Replace(
+                "#unity-container.unity-mobile { position: fixed; width: 100%; height: 100% }",
+                "#unity-container.unity-mobile { position: fixed; inset: 0; width: 100vw; height: 100%; height: 100dvh }");
+            File.WriteAllText(stylePath, css);
         }
     }
 }

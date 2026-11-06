@@ -17,6 +17,7 @@ namespace YnaAce
         private Transform umpire;
         private Transform ball;
         private Rigidbody ballBody;
+        private TrailRenderer ballTrail;
         private Vector3 ballStart;
         private Vector3 target = new Vector3(0f, 1f, 0.2f);
         private float pitchStart;
@@ -38,6 +39,9 @@ namespace YnaAce
         private bool playerBatting = true;
         private bool gameOver;
         private bool changingHalf;
+        private bool runnerMoving;
+        private Animation runnerAnimation;
+        private Coroutine pitchRoutine;
         private string role = "打者";
         private string call = "ストライクゾーンを選び、来た球を SPACE またはクリックで打ってください。";
         private GUIStyle titleStyle;
@@ -102,6 +106,13 @@ namespace YnaAce
             ballBody.mass = 0.145f;
             ballBody.useGravity = false;
             ballBody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            ballTrail = ball.gameObject.AddComponent<TrailRenderer>();
+            ballTrail.time = 0.55f;
+            ballTrail.startWidth = 0.11f;
+            ballTrail.endWidth = 0.015f;
+            ballTrail.minVertexDistance = 0.02f;
+            var trailMaterial = Resources.Load<Material>("YnaAceMaterial");
+            if (trailMaterial != null) ballTrail.material = new Material(trailMaterial);
             ballStart = ball.position;
         }
 
@@ -159,6 +170,7 @@ namespace YnaAce
             visual.transform.localPosition = new Vector3(0f, -bounds.min.y * modelScale, 0f);
             ApplyRoleMaterials(visual, uniformColor);
             PlayModelAnimation(visual);
+            if (actor == runner) runnerAnimation = visual.GetComponentInChildren<Animation>(true);
             if (addBat) AddBat(visual.transform, uniformColor);
 
             // 正しい大きさの実モデルが生成できた後で、カプセル仮モデルだけを隠す。
@@ -204,7 +216,14 @@ namespace YnaAce
         private static void PlayModelAnimation(GameObject visual)
         {
             var animation = visual.GetComponentInChildren<Animation>(true);
-            if (animation != null && animation.clip != null) animation.Play(animation.clip.name);
+            if (animation == null) return;
+
+            // glTFの先頭クリップはAttackなので、全選手が攻撃動作を繰り返す状態を防ぎます。
+            animation.wrapMode = WrapMode.Loop;
+            if (animation.GetClip("Idle") != null)
+                animation.CrossFade("Idle", 0.18f);
+            else if (animation.clip != null)
+                animation.Stop();
         }
 
         private static void AddBat(Transform parent, Color uniformColor)
@@ -219,9 +238,10 @@ namespace YnaAce
         {
             gameCamera = new GameObject("YNA ACE 三人称カメラ").AddComponent<Camera>();
             gameCamera.depth = 10;
-            gameCamera.transform.position = new Vector3(0f, 3.4f, -8.5f);
-            gameCamera.transform.LookAt(new Vector3(0f, 1.3f, 10f));
-            gameCamera.fieldOfView = 58f;
+            // 打者・捕手・審判を重ねず、投手とホームまでを一画面に収めます。
+            gameCamera.transform.position = new Vector3(0f, 4.4f, -15f);
+            gameCamera.transform.LookAt(new Vector3(0f, 1.5f, 10f));
+            gameCamera.fieldOfView = 62f;
         }
 
         private void Update()
@@ -237,14 +257,40 @@ namespace YnaAce
                 if (KeyPressed(Key.R)) RestartGame();
                 return;
             }
-            if (KeyPressed(Key.Space) || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)) Swing();
+            if (KeyPressed(Key.Space) || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !PointerOverGameControls())) Swing();
             if (KeyPressed(Key.A)) MoveRunner(-1f);
             if (KeyPressed(Key.D)) MoveRunner(1f);
-            if (!pitching && !ballInPlay && !changingHalf && role == "打者" && KeyPressed(Key.Enter)) StartCoroutine(ThrowPitch());
+            if (!pitching && !ballInPlay && !changingHalf && role == "打者" && KeyPressed(Key.Enter)) StartPitch();
             AnimatePlayers();
         }
 
         private static bool KeyPressed(Key key) => Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame;
+
+        private bool PointerOverGameControls()
+        {
+            if (Mouse.current == null) return false;
+            float uiScale = Mathf.Max(0.35f, Mathf.Min(1f, Mathf.Min(Screen.width / 1280f, Screen.height / 720f)));
+            float uiWidth = Screen.width / uiScale;
+            float uiHeight = Screen.height / uiScale;
+            Vector2 mouse = Mouse.current.position.ReadValue();
+            Vector2 point = new Vector2(mouse.x / uiScale, (Screen.height - mouse.y) / uiScale);
+
+            // IMGUIの操作領域でマウスを押しても、Update側でスイングさせません。
+            if (new Rect(24, 72, 390, 150).Contains(point)) return true;
+            if (new Rect(uiWidth - 390, 22, 366, 150).Contains(point)) return true;
+            int gridSize = Mathf.Clamp((int)(uiWidth / 14f), 42, 62);
+            int gridWidth = gridSize * 5 + 4 * 4;
+            int gridX = (int)(uiWidth - gridWidth - 24f);
+            int gridY = (int)(uiHeight - gridSize * 5 - 110);
+            if (new Rect(gridX, gridY - 30, gridWidth, gridSize * 5 + 140).Contains(point)) return true;
+            return new Rect(24, uiHeight - 52, 110, 32).Contains(point);
+        }
+
+        private void StartPitch()
+        {
+            if (pitchRoutine == null && !pitching && !ballInPlay && !changingHalf && !gameOver)
+                pitchRoutine = StartCoroutine(ThrowPitch());
+        }
 
         private IEnumerator ThrowPitch()
         {
@@ -276,6 +322,7 @@ namespace YnaAce
             pitching = false;
             pitchInFlight = false;
             swung = false;
+            pitchRoutine = null;
         }
 
         private void Swing()
@@ -286,7 +333,7 @@ namespace YnaAce
             float distance = Vector3.Distance(ball.position, new Vector3(-0.15f, 1.05f, 0.35f));
             if (timing < 0.18f && distance < 2.1f)
             {
-                StopAllCoroutines();
+                StopPitchRoutine();
                 pitching = false;
                 pitchInFlight = false;
                 ballInPlay = true;
@@ -300,8 +347,17 @@ namespace YnaAce
             {
                 call = "空振り！";
                 CountPitch(true);
+                StopPitchRoutine();
                 pitching = false;
+                pitchInFlight = false;
             }
+        }
+
+        private void StopPitchRoutine()
+        {
+            if (pitchRoutine == null) return;
+            StopCoroutine(pitchRoutine);
+            pitchRoutine = null;
         }
 
         private void ResolveCpuAtPlate()
@@ -341,38 +397,62 @@ namespace YnaAce
 
         private IEnumerator FieldBall(bool playerHit)
         {
-            float until = Time.time + 1.4f;
-            while (Time.time < until)
+            float started = Time.time;
+            bool caught = false;
+            while (Time.time - started < 8f)
             {
-                pitcher.position = Vector3.MoveTowards(pitcher.position, new Vector3(ball.position.x, 0f, ball.position.z), Time.deltaTime * 5f);
+                var ballGroundPosition = new Vector3(ball.position.x, 0f, ball.position.z);
+                if (ball.position.y < 2f && ball.position.z < 32f)
+                {
+                    pitcher.position = Vector3.MoveTowards(pitcher.position, ballGroundPosition, Time.deltaTime * 6.5f);
+                    if (Vector3.Distance(pitcher.position, ballGroundPosition) < 1.15f)
+                    {
+                        caught = true;
+                        ballBody.linearVelocity = Vector3.zero;
+                        ballBody.angularVelocity = Vector3.zero;
+                        ballBody.isKinematic = true;
+                        ball.position = pitcher.position + Vector3.up * 1.15f;
+                        break;
+                    }
+                }
+                if (ball.position.y <= 0.1f && ballBody.linearVelocity.sqrMagnitude < 0.12f && Time.time - started > 0.8f)
+                    break;
                 yield return null;
             }
-            bool fielded = ball.position.z < 25f && ball.position.y < 2.5f;
-            if (fielded)
+
+            bool homeRun = ball.position.z >= 43f && Mathf.Abs(ball.position.x) <= 16f;
+            if (caught)
             {
-                RegisterOut("ピッチャーが前へ！ 打球を処理しました。アウト！");
+                RegisterOut("ピッチャーが追いついて捕球！ 打者アウト！");
             }
             else
             {
                 bool[] oldBases = (bool[])bases.Clone();
                 System.Array.Clear(bases, 0, bases.Length);
-                int runs = 0;
+                int runs = homeRun ? 1 : 0;
                 for (int i = 0; i < oldBases.Length; i++)
                 {
                     if (!oldBases[i]) continue;
-                    int destination = i + 1;
-                    if (destination >= bases.Length) runs++;
-                    else bases[destination] = true;
+                    if (homeRun || i == 2) runs++;
+                    else bases[i + 1] = true;
                 }
-                bases[0] = true;
+                if (!homeRun) bases[0] = true;
                 AddRuns(playerHit, runs);
-                runner.gameObject.SetActive(true);
-                SyncRunnerVisual();
-                call = runs > 0 ? "走者が生還！ " + runs + "点入りました。打者は一塁へ。" : "打球が抜けた！ 打者は一塁、走者は進塁！";
+                if (playerHit)
+                {
+                    runner.gameObject.SetActive(!homeRun);
+                    SyncRunnerVisual();
+                }
+                else
+                {
+                    runner.gameObject.SetActive(false);
+                }
+                call = homeRun ? "ホームラン！ " + runs + "点！" : runs > 0 ? "走者が生還！ " + runs + "点入りました。" : "打球が抜けた！ 打者は一塁、走者は進塁！";
             }
             ResetBall();
             ballInPlay = false;
             swung = false;
+            CheckWalkOff();
         }
 
         private void CountPitch(bool swingMiss)
@@ -393,10 +473,11 @@ namespace YnaAce
             if (bases[0] && bases[1]) bases[2] = true;
             if (bases[0]) bases[1] = true;
             bases[0] = true;
-            runner.gameObject.SetActive(true);
-            SyncRunnerVisual();
+            runner.gameObject.SetActive(playerOnOffense);
+            if (playerOnOffense) SyncRunnerVisual();
             call = "フォアボール。押し出しを含め走者が進塁しました。";
             ResetCount();
+            CheckWalkOff();
         }
 
         private void AddRuns(bool playerOnOffense, int runs)
@@ -415,6 +496,13 @@ namespace YnaAce
             }
         }
 
+        private void CheckWalkOff()
+        {
+            // CPUは後攻なので、9回以降の裏にリードを奪った時点で終了します。
+            if (!playerBatting && inning >= 9 && cpuScore > playerScore)
+                FinishGame();
+        }
+
         private void ResetBall()
         {
             pitching = false;
@@ -422,6 +510,8 @@ namespace YnaAce
             ballBody.isKinematic = true;
             ballBody.useGravity = false;
             ball.position = ballStart;
+            if (ballTrail != null) ballTrail.Clear();
+            pitcher.position = new Vector3(0f, 0f, 18.44f);
         }
 
         private bool IsStrikeZone() => Mathf.Abs(target.x) < 0.72f && target.y > 0.48f && target.y < 1.28f;
@@ -461,6 +551,7 @@ namespace YnaAce
             ResetCount();
             ballInPlay = false;
             runner.gameObject.SetActive(false);
+            runnerMoving = false;
             System.Array.Clear(bases, 0, bases.Length);
             runner.position = new Vector3(-0.4f, 0f, 0.9f);
             pitcher.position = new Vector3(0f, 0f, 18.44f);
@@ -494,6 +585,8 @@ namespace YnaAce
             System.Array.Clear(bases, 0, bases.Length);
             System.Array.Clear(playerInningRuns, 0, playerInningRuns.Length);
             System.Array.Clear(cpuInningRuns, 0, cpuInningRuns.Length);
+            pitchRoutine = null;
+            runnerMoving = false;
             paused = false;
             Time.timeScale = 1f;
             ResetBall();
@@ -502,10 +595,11 @@ namespace YnaAce
 
         private void MoveRunner(float direction)
         {
-            if (!runner.gameObject.activeSelf || role != "打者" || pitching || ballInPlay) return;
+            if (!runner.gameObject.activeSelf || runnerMoving || role != "打者" || pitching || ballInPlay) return;
             int occupied = -1;
             for (int i = 2; i >= 0; i--) if (bases[i]) { occupied = i; break; }
             if (occupied < 0) { call = "走者はいません。"; return; }
+            Vector3 nextBase = occupied == 2 ? new Vector3(0f, 0f, 0f) : BasePosition(occupied + 1);
             if (direction > 0)
             {
                 if (occupied < 2 && bases[occupied + 1])
@@ -517,14 +611,41 @@ namespace YnaAce
                 if (occupied == 2) AddRuns(true, 1);
                 else bases[occupied + 1] = true;
                 call = occupied == 2 ? "走者がホームイン！ 1点追加！" : "走者が次の塁へ進みました。";
-                SyncRunnerVisual();
+                runnerMoving = true;
+                StartCoroutine(RunRunnerTo(nextBase));
+                CheckWalkOff();
             }
             else
             {
-                Vector3 nextBase = occupied == 2 ? new Vector3(0f, 0f, 0f) : BasePosition(occupied + 1);
-                runner.position += (nextBase - runner.position).normalized * 0.55f;
-                call = "左足でリードを取りました。Dで次の塁へ走れます。";
+                Vector3 lead = runner.position + (nextBase - runner.position).normalized * 1.1f;
+                call = "リードを広げています。Dで次の塁へ走れます。";
+                runnerMoving = true;
+                StartCoroutine(RunRunnerTo(lead, false));
             }
+        }
+
+        private IEnumerator RunRunnerTo(Vector3 destination, bool snapToBase = true)
+        {
+            PlayRunnerAnimation("Run");
+            while (Vector3.Distance(runner.position, destination) > 0.05f)
+            {
+                Vector3 direction = destination - runner.position;
+                direction.y = 0f;
+                if (direction.sqrMagnitude > 0.001f)
+                    runner.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+                runner.position = Vector3.MoveTowards(runner.position, destination, Time.deltaTime * 6.5f);
+                yield return null;
+            }
+
+            if (snapToBase) SyncRunnerVisual();
+            PlayRunnerAnimation("Idle");
+            runnerMoving = false;
+        }
+
+        private void PlayRunnerAnimation(string clipName)
+        {
+            if (runnerAnimation == null || runnerAnimation.GetClip(clipName) == null) return;
+            runnerAnimation.CrossFade(clipName, 0.12f);
         }
 
         private void SyncRunnerVisual()
@@ -553,10 +674,8 @@ namespace YnaAce
 
         private void AnimatePlayers()
         {
-            float sway = Mathf.Sin(Time.time * 3f) * 2f;
-            batter.localRotation = Quaternion.Euler(0f, 180f + sway, 0f);
-            pitcher.localRotation = Quaternion.Euler(0f, sway, 0f);
-            if (pitching) pitcher.localRotation *= Quaternion.Euler(Mathf.Sin(Time.time * 12f) * 10f, 0f, 0f);
+            batter.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            pitcher.localRotation = Quaternion.Euler(pitching ? Mathf.Sin(Time.time * 12f) * 3f : 0f, 0f, 0f);
             AnimateActor(pitcher, Time.time * 5f, pitching);
             AnimateActor(batter, Time.time * 4f + 1f, pitching && role == "打者");
             if (runner.gameObject.activeSelf) AnimateActor(runner, Time.time * 9f, true);
@@ -598,7 +717,8 @@ namespace YnaAce
 
             int gridSize = Mathf.Clamp((int)(uiWidth / 14f), 42, 62);
             int gridWidth = gridSize * 5 + 4 * 4;
-            int gridX = (int)((uiWidth - gridWidth) / 2f);
+            // ゾーンを右端へ移して、打者・捕手・審判が見える中央を空けます。
+            int gridX = (int)(uiWidth - gridWidth - 24f);
             int gridY = (int)(uiHeight - gridSize * 5 - 110);
             GUI.Label(new Rect(gridX, gridY - 30, gridWidth, 26), role == "投手" ? "投げるコース" : "打つコース（予想位置）", textStyle);
             for (int y = 0; y < 5; y++) for (int x = 0; x < 5; x++)
@@ -612,7 +732,7 @@ namespace YnaAce
                     if (!pitching && !ballInPlay && !changingHalf && !gameOver)
                     {
                         target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
-                        if (role == "投手") StartCoroutine(ThrowPitch());
+                        if (role == "投手") StartPitch();
                         else if (role == "打者") call = "狙いを定めました。ENTER または投球ボタンで開始。";
                     }
                 }
@@ -621,13 +741,35 @@ namespace YnaAce
                 if (isSelected) GUI.Label(cell, "●", targetStyle);
             }
             Rect actionRect = new Rect(gridX, gridY + gridSize * 5 + 16, gridWidth, 32);
-            if (role == "打者" && !pitching && !ballInPlay && !changingHalf && !gameOver)
+            if (gameOver)
             {
-                if (GUI.Button(actionRect, "投球を待つ（ENTER）")) StartCoroutine(ThrowPitch());
+                if (GUI.Button(actionRect, "もう一度プレイ（R）")) RestartGame();
+            }
+            else if (role == "打者" && !pitching && !ballInPlay && !changingHalf)
+            {
+                if (GUI.Button(actionRect, "投球を待つ（ENTER）")) StartPitch();
             }
             else
             {
-                GUI.Label(actionRect, gameOver ? "R：再戦" : (paused ? "一時停止中（Pで再開）" : (ballInPlay ? "打球処理中" : "SPACE/クリック：スイング　P：停止　A/D：走塁")), smallStyle);
+                GUI.Label(actionRect, paused ? "一時停止中（Pで再開）" : (ballInPlay ? "打球処理中" : "SPACE/クリック：スイング　P：停止　A/D：走塁"), smallStyle);
+            }
+            if (role == "打者" && pitching && pitchInFlight && !swung)
+            {
+                var swingRect = new Rect(gridX, actionRect.y + 34, gridWidth, 38);
+                if (GUI.Button(swingRect, "スイング")) Swing();
+            }
+            if (role == "打者" && runner.gameObject.activeSelf && !pitching && !ballInPlay)
+            {
+                float runY = actionRect.y + 38;
+                float runWidth = (gridWidth - 8) / 2f;
+                if (GUI.Button(new Rect(gridX, runY, runWidth, 34), "A　リード")) MoveRunner(-1f);
+                if (GUI.Button(new Rect(gridX + runWidth + 8, runY, runWidth, 34), "D　次の塁へ")) MoveRunner(1f);
+            }
+            var pauseRect = new Rect(24, uiHeight - 52, 110, 32);
+            if (GUI.Button(pauseRect, paused ? "再開（P）" : "一時停止（P）"))
+            {
+                paused = !paused;
+                Time.timeScale = paused ? 0f : 1f;
             }
             GUI.matrix = previousMatrix;
         }
