@@ -20,6 +20,8 @@ namespace YnaAce
         private TrailRenderer ballTrail;
         private Vector3 ballStart;
         private Vector3 target = new Vector3(0f, 1f, 0.2f);
+        private int selectedZoneX = 2;
+        private int selectedZoneY = 2;
         private float pitchStart;
         private float pitchDuration;
         private bool pitching;
@@ -261,7 +263,22 @@ namespace YnaAce
             if (KeyPressed(Key.A)) MoveRunner(-1f);
             if (KeyPressed(Key.D)) MoveRunner(1f);
             if (!pitching && !ballInPlay && !changingHalf && role == "打者" && KeyPressed(Key.Enter)) StartPitch();
+            if (!pitching && !ballInPlay && !changingHalf && role == "投手")
+            {
+                if (KeyPressed(Key.LeftArrow)) SelectPitchZone(selectedZoneX - 1, selectedZoneY);
+                if (KeyPressed(Key.RightArrow)) SelectPitchZone(selectedZoneX + 1, selectedZoneY);
+                if (KeyPressed(Key.UpArrow)) SelectPitchZone(selectedZoneX, selectedZoneY - 1);
+                if (KeyPressed(Key.DownArrow)) SelectPitchZone(selectedZoneX, selectedZoneY + 1);
+                if (KeyPressed(Key.Enter)) StartPitch();
+            }
             AnimatePlayers();
+        }
+
+        private void SelectPitchZone(int x, int y)
+        {
+            selectedZoneX = Mathf.Clamp(x, 0, 4);
+            selectedZoneY = Mathf.Clamp(y, 0, 4);
+            target = new Vector3((selectedZoneX - 2) * 0.38f, 1.38f - selectedZoneY * 0.2f, 0.25f);
         }
 
         private static bool KeyPressed(Key key) => Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame;
@@ -731,7 +748,7 @@ namespace YnaAce
                 {
                     if (!pitching && !ballInPlay && !changingHalf && !gameOver)
                     {
-                        target = new Vector3((x - 2) * 0.38f, 1.38f - y * 0.2f, 0.25f);
+                        SelectPitchZone(x, y);
                         if (role == "投手") StartPitch();
                         else if (role == "打者") call = "狙いを定めました。ENTER または投球ボタンで開始。";
                     }
@@ -751,7 +768,8 @@ namespace YnaAce
             }
             else
             {
-                GUI.Label(actionRect, paused ? "一時停止中（Pで再開）" : (ballInPlay ? "打球処理中" : "SPACE/クリック：スイング　P：停止　A/D：走塁"), smallStyle);
+                string controls = role == "投手" ? "矢印：コース選択　ENTER：投球　P：停止" : "SPACE/クリック：スイング　P：停止　A/D：走塁";
+                GUI.Label(actionRect, paused ? "一時停止中（Pで再開）" : (ballInPlay ? "打球処理中" : controls), smallStyle);
             }
             if (role == "打者" && pitching && pitchInFlight && !swung)
             {
