@@ -9,6 +9,9 @@ namespace YnaAce.Editor
     /// <summary>ブラウザ配布用の WebGL 出力を Build/WebGL に作成します。</summary>
     public static class WebGlBuild
     {
+        [MenuItem("Tools/YNA ACE/Build WebGL")]
+        private static void BuildWebGlFromMenu() => PerformBuild();
+
         public static void PerformBuild()
         {
             var scenes = EditorBuildSettings.scenes
