@@ -71,6 +71,8 @@ namespace YnaAce.Editor
                 "#unity-container.unity-mobile { position: fixed; width: 100%; height: 100% }",
                 "#unity-container.unity-mobile { position: fixed; inset: 0; width: 100vw; height: 100%; height: 100dvh }");
             File.WriteAllText(stylePath, css);
+            // Unityが出力フォルダーを作り直してもGitHub Pages向け設定を維持します。
+            File.WriteAllText(Path.Combine(outputPath, ".nojekyll"), "\n");
         }
     }
 }

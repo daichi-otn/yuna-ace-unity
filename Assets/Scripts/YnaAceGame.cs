@@ -467,6 +467,8 @@ namespace YnaAce
                 call = homeRun ? "ホームラン！ " + runs + "点！" : runs > 0 ? "走者が生還！ " + runs + "点入りました。" : "打球が抜けた！ 打者は一塁、走者は進塁！";
             }
             ResetBall();
+            // 打球が確定したら次打者のカウントへ進みます（守備側の捕球アウトはRegisterOutでも初期化）。
+            ResetCount();
             ballInPlay = false;
             swung = false;
             CheckWalkOff();
