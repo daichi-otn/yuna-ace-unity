@@ -389,7 +389,7 @@ namespace YnaAce
                 ResetBall();
                 return;
             }
-            if (decision < 0.28f)
+            if (decision < 0.38f)
             {
                 strikes++;
                 call = "CPU打者、空振り！";
@@ -397,7 +397,7 @@ namespace YnaAce
                 ResetBall();
                 return;
             }
-            if (decision < 0.68f)
+            if (decision < 0.58f)
             {
                 ballBody.isKinematic = false;
                 ballBody.useGravity = true;
