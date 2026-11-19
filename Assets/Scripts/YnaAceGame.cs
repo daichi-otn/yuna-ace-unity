@@ -72,6 +72,8 @@ namespace YnaAce
             Physics.gravity = new Vector3(0f, -9.81f, 0f);
             BuildStadium();
             CreatePlayers();
+            // 低ポリの人型GLBを優先し、読み込みに失敗した場合だけ分割式の仮モデルを使います。
+            LoadRealPlayers();
             CreateBall();
             SetupCamera();
             BeginHalfInning();
