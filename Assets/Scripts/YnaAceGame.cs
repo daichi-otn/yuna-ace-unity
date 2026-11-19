@@ -72,7 +72,6 @@ namespace YnaAce
             Physics.gravity = new Vector3(0f, -9.81f, 0f);
             BuildStadium();
             CreatePlayers();
-            LoadRealPlayers();
             CreateBall();
             SetupCamera();
             BeginHalfInning();
@@ -957,14 +956,24 @@ namespace YnaAce
         private static Transform MakePlayer(string label, Vector3 position, Color uniform)
         {
             var root = new GameObject(label); root.transform.position = position;
-            MakePart(root.transform, PrimitiveType.Capsule, "胴体", new Vector3(0f, 1.05f, 0f), new Vector3(0.62f, 0.78f, 0.42f), uniform, Vector3.zero);
-            MakePart(root.transform, PrimitiveType.Sphere, "頭", new Vector3(0f, 2.15f, 0f), Vector3.one * 0.42f, new Color(0.92f, 0.67f, 0.48f), Vector3.zero);
-            MakePart(root.transform, PrimitiveType.Capsule, "腕L", new Vector3(-0.48f, 1.15f, 0f), new Vector3(0.18f, 0.55f, 0.18f), uniform, new Vector3(0f, 0f, -12f));
-            MakePart(root.transform, PrimitiveType.Capsule, "腕R", new Vector3(0.48f, 1.15f, 0f), new Vector3(0.18f, 0.55f, 0.18f), uniform, new Vector3(0f, 0f, 12f));
-            MakePart(root.transform, PrimitiveType.Capsule, "脚L", new Vector3(-0.22f, 0.05f, 0f), new Vector3(0.22f, 0.65f, 0.22f), uniform, Vector3.zero);
-            MakePart(root.transform, PrimitiveType.Capsule, "脚R", new Vector3(0.22f, 0.05f, 0f), new Vector3(0.22f, 0.65f, 0.22f), uniform, Vector3.zero);
-            MakePart(root.transform, PrimitiveType.Cylinder, "帽子", new Vector3(0f, 2.52f, 0f), new Vector3(0.46f, 0.12f, 0.46f), uniform * 0.8f, Vector3.zero);
-            MakePart(root.transform, PrimitiveType.Sphere, "グローブ", new Vector3(0.66f, 1.03f, 0.14f), Vector3.one * 0.19f, new Color(0.2f, 0.09f, 0.03f), Vector3.zero);
+            Color skin = new Color(0.78f, 0.43f, 0.25f);
+            Color shoe = new Color(0.035f, 0.045f, 0.06f);
+            // 角張った一体型モデルではなく、頭・胴・関節・靴を分けたデフォルメ選手にします。
+            MakePart(root.transform, PrimitiveType.Capsule, "胴体", new Vector3(0f, 1.12f, 0f), new Vector3(0.52f, 0.7f, 0.34f), uniform, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "腰", new Vector3(0f, 0.72f, 0f), new Vector3(0.48f, 0.26f, 0.32f), uniform * 0.86f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Cylinder, "首", new Vector3(0f, 1.78f, 0f), new Vector3(0.16f, 0.14f, 0.16f), skin, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "頭", new Vector3(0f, 2.08f, 0f), new Vector3(0.34f, 0.4f, 0.34f), skin, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Capsule, "腕L", new Vector3(-0.46f, 1.17f, 0f), new Vector3(0.15f, 0.48f, 0.15f), uniform, new Vector3(0f, 0f, -14f));
+            MakePart(root.transform, PrimitiveType.Capsule, "腕R", new Vector3(0.46f, 1.17f, 0f), new Vector3(0.15f, 0.48f, 0.15f), uniform, new Vector3(0f, 0f, 14f));
+            MakePart(root.transform, PrimitiveType.Sphere, "手L", new Vector3(-0.58f, 0.72f, 0f), Vector3.one * 0.13f, skin, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "手R", new Vector3(0.58f, 0.72f, 0f), Vector3.one * 0.13f, skin, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Capsule, "脚L", new Vector3(-0.2f, 0.22f, 0f), new Vector3(0.17f, 0.55f, 0.17f), uniform * 0.9f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Capsule, "脚R", new Vector3(0.2f, 0.22f, 0f), new Vector3(0.17f, 0.55f, 0.17f), uniform * 0.9f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "靴L", new Vector3(-0.23f, -0.02f, -0.11f), new Vector3(0.24f, 0.12f, 0.38f), shoe, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "靴R", new Vector3(0.23f, -0.02f, -0.11f), new Vector3(0.24f, 0.12f, 0.38f), shoe, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Cylinder, "ヘルメット", new Vector3(0f, 2.4f, 0f), new Vector3(0.39f, 0.16f, 0.39f), uniform * 0.72f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Cube, "つば", new Vector3(0f, 2.34f, -0.27f), new Vector3(0.28f, 0.045f, 0.22f), uniform * 0.72f, Vector3.zero);
+            MakePart(root.transform, PrimitiveType.Sphere, "グローブ", new Vector3(0.62f, 1.0f, 0.14f), Vector3.one * 0.18f, new Color(0.2f, 0.09f, 0.03f), Vector3.zero);
             return root.transform;
         }
 
