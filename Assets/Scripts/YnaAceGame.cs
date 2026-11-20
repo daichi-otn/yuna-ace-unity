@@ -180,7 +180,8 @@ namespace YnaAce
             ApplyRoleMaterials(visual, uniformColor);
             PlayModelAnimation(visual);
             if (actor == runner) runnerAnimation = visual.GetComponentInChildren<Animation>(true);
-            if (addBat) batVisual = AddBat(visual.transform, uniformColor);
+            // GLB側の拡大率をバットに二重適用しないよう、選手ルートへ直接取り付けます。
+            if (addBat) batVisual = AddBat(actor, uniformColor);
 
             // 正しい大きさの実モデルが生成できた後で、カプセル仮モデルだけを隠す。
             foreach (Transform child in actor)
@@ -237,10 +238,10 @@ namespace YnaAce
 
         private static Transform AddBat(Transform parent, Color uniformColor)
         {
-            var bat = MakePrimitive(PrimitiveType.Cylinder, "バット", parent.position, new Vector3(0.06f, 0.65f, 0.06f), new Color(0.35f, 0.12f, 0.03f));
+            var bat = MakePrimitive(PrimitiveType.Cylinder, "バット", parent.position, new Vector3(0.05f, 0.82f, 0.05f), new Color(0.35f, 0.12f, 0.03f));
             bat.transform.SetParent(parent, false);
-            bat.transform.localPosition = new Vector3(0.55f, 1.15f, 0.16f);
-            bat.transform.localRotation = Quaternion.Euler(20f, 0f, 68f);
+            bat.transform.localPosition = new Vector3(0.52f, 1.02f, 0.18f);
+            bat.transform.localRotation = Quaternion.Euler(18f, 0f, 68f);
             return bat.transform;
         }
 
