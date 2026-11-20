@@ -82,15 +82,15 @@ namespace YnaAce
         private void BuildStadium()
         {
             RenderSettings.ambientLight = new Color(0.68f, 0.75f, 0.82f);
-            MakePrimitive(PrimitiveType.Plane, "芝生", new Vector3(0f, 0f, 18f), new Vector3(7f, 1f, 7f), new Color(0.08f, 0.38f, 0.13f));
+            MakePrimitive(PrimitiveType.Plane, "芝生", new Vector3(0f, 0f, 28f), new Vector3(10f, 1f, 10f), new Color(0.08f, 0.38f, 0.13f));
             MakePrimitive(PrimitiveType.Cylinder, "マウンド", new Vector3(0f, 0.1f, 18.44f), new Vector3(1.4f, 0.1f, 1.4f), new Color(0.58f, 0.37f, 0.19f));
             MakePrimitive(PrimitiveType.Cube, "ホームベース", Vector3.zero, new Vector3(0.43f, 0.06f, 0.43f), Color.white);
-            foreach (Vector3 basePos in new[] { new Vector3(8f, 0.05f, 8f), new Vector3(0f, 0.05f, 16f), new Vector3(-8f, 0.05f, 8f) })
+            foreach (Vector3 basePos in new[] { new Vector3(12.9f, 0.05f, 12.9f), new Vector3(0f, 0.05f, 25.8f), new Vector3(-12.9f, 0.05f, 12.9f) })
                 MakePrimitive(PrimitiveType.Cube, "塁", basePos, new Vector3(0.45f, 0.1f, 0.45f), Color.white);
             for (int i = -2; i <= 2; i++)
-                MakePrimitive(PrimitiveType.Cube, "スタンド", new Vector3(i * 7f, 2.2f, 34f), new Vector3(6.5f, 3.5f, 1.8f), new Color(0.16f, 0.2f, 0.32f));
-            MakePrimitive(PrimitiveType.Cube, "外野フェンス", new Vector3(0f, 1.6f, 43f), new Vector3(32f, 3.2f, 0.4f), new Color(0.04f, 0.2f, 0.11f));
-            MakePrimitive(PrimitiveType.Cube, "スコアボード", new Vector3(0f, 7f, 42.5f), new Vector3(9f, 4f, 0.35f), new Color(0.03f, 0.05f, 0.08f));
+                MakePrimitive(PrimitiveType.Cube, "スタンド", new Vector3(i * 9f, 2.2f, 47f), new Vector3(8.5f, 3.5f, 1.8f), new Color(0.16f, 0.2f, 0.32f));
+            MakePrimitive(PrimitiveType.Cube, "外野フェンス", new Vector3(0f, 1.6f, 60f), new Vector3(42f, 3.2f, 0.4f), new Color(0.04f, 0.2f, 0.11f));
+            MakePrimitive(PrimitiveType.Cube, "スコアボード", new Vector3(0f, 7f, 59.5f), new Vector3(11f, 4f, 0.35f), new Color(0.03f, 0.05f, 0.08f));
             var sun = new GameObject("太陽").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.intensity = 1.4f;
@@ -249,8 +249,8 @@ namespace YnaAce
             gameCamera = new GameObject("YNA ACE 三人称カメラ").AddComponent<Camera>();
             gameCamera.depth = 10;
             // 打者・捕手・審判を重ねず、投手とホームまでを一画面に収めます。
-            gameCamera.transform.position = new Vector3(0f, 4.4f, -15f);
-            gameCamera.transform.LookAt(new Vector3(0f, 1.5f, 10f));
+            gameCamera.transform.position = new Vector3(0f, 5.2f, -18f);
+            gameCamera.transform.LookAt(new Vector3(0f, 1.5f, 14f));
             gameCamera.fieldOfView = 62f;
         }
 
@@ -461,7 +461,7 @@ namespace YnaAce
                 yield return null;
             }
 
-            bool homeRun = ball.position.z >= 43f && Mathf.Abs(ball.position.x) <= 16f;
+            bool homeRun = ball.position.z >= 60f && Mathf.Abs(ball.position.x) <= 21f;
             if (caught)
             {
                 RegisterOut("ピッチャーが追いついて捕球！ 打者アウト！");
@@ -709,9 +709,9 @@ namespace YnaAce
         {
             return baseIndex switch
             {
-                0 => new Vector3(8f, 0f, 8f),
-                1 => new Vector3(0f, 0f, 16f),
-                _ => new Vector3(-8f, 0f, 8f)
+                0 => new Vector3(12.9f, 0f, 12.9f),
+                1 => new Vector3(0f, 0f, 25.8f),
+                _ => new Vector3(-12.9f, 0f, 12.9f)
             };
         }
 
@@ -734,8 +734,8 @@ namespace YnaAce
         private void LateUpdate()
         {
             if (gameCamera == null || paused) return;
-            Vector3 position = ballInPlay ? new Vector3(0f, 16f, -12f) : playerBatting ? new Vector3(0f, 4.4f, -15f) : new Vector3(2.5f, 4f, 24f);
-            Vector3 focus = ballInPlay ? Vector3.Lerp(new Vector3(0f, 1f, 16f), ball.position, 0.35f) : playerBatting ? new Vector3(0f, 1.5f, 10f) : new Vector3(0f, 1f, 0f);
+            Vector3 position = ballInPlay ? new Vector3(0f, 18f, -15f) : playerBatting ? new Vector3(0f, 5.2f, -18f) : new Vector3(3f, 5f, 30f);
+            Vector3 focus = ballInPlay ? Vector3.Lerp(new Vector3(0f, 1f, 22f), ball.position, 0.35f) : playerBatting ? new Vector3(0f, 1.5f, 14f) : new Vector3(0f, 1f, 0f);
             gameCamera.transform.position = Vector3.Lerp(gameCamera.transform.position, position, Time.deltaTime * 4f);
             gameCamera.transform.rotation = Quaternion.Slerp(gameCamera.transform.rotation, Quaternion.LookRotation(focus - gameCamera.transform.position), Time.deltaTime * 4f);
         }
